@@ -1,19 +1,42 @@
-import React, { useState, useEffect } from "react";
-import { Table, Button, Modal, Form, Input, Select, message, Popconfirm } from "antd";
-import { EditOutlined, DeleteOutlined, LogoutOutlined } from "@ant-design/icons";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Select,
+  message,
+  Popconfirm,
+  Layout,
+  Menu,
+} from "antd";
+import {
+  EditOutlined,
+  DeleteOutlined,
+  LogoutOutlined,
+  UserOutlined,
+  FileTextOutlined,
+} from "@ant-design/icons";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { jsPDF } from "jspdf";
+
+const { Header, Content, Sider } = Layout;
 
 const AdminPage = () => {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [interventions, setInterventions] = useState([]);
   const [filteredInterventions, setFilteredInterventions] = useState([]);
-  const [isModalVisible, setIsModalVisible] = useState(false); // pour modifier le rôle d'un utilisateur
-  const [assigningInterventionId, setAssigningInterventionId] = useState(null); // intervention en cours d'assignation
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [assigningInterventionId, setAssigningInterventionId] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [form] = Form.useForm();
   const navigate = useNavigate();
+
+  const interventionRef = useRef(null);
+  const userRef = useRef(null);
 
   useEffect(() => {
     fetchInterventions();
@@ -24,10 +47,8 @@ const AdminPage = () => {
     try {
       const response = await axios.get("http://127.0.0.1:8000/api/interventions");
       setInterventions(response.data);
-      setFilteredInterventions(response.data); // Initialement, toutes les interventions sont filtrées
-      console.log("Interventions:", response.data); // Pour déboguer les données des interventions
+      setFilteredInterventions(response.data);
     } catch (error) {
-      console.error(error);
       message.error("Erreur lors de la récupération des interventions.");
     }
   };
@@ -36,47 +57,61 @@ const AdminPage = () => {
     try {
       const response = await axios.get("http://127.0.0.1:8000/api/users");
       setUsers(response.data);
-      setFilteredUsers(response.data); // Initialement, tous les utilisateurs sont filtrés
-      console.log("Utilisateurs:", response.data); // Pour déboguer les utilisateurs
+      setFilteredUsers(response.data);
     } catch (error) {
-      console.error(error);
       message.error("Erreur lors de la récupération des utilisateurs.");
     }
   };
 
-  // Fonction pour assigner un employé à l'intervention (opération inline)
-  const assignIntervention = async (interventionId, employeeId) => {
-    if (!employeeId) {
-      message.error("Veuillez sélectionner un employé.");
-      return;
-    }
+  const generatePDF = (intervention) => {
+    const doc = new jsPDF();
+    doc.text("Détails de l'intervention", 10, 10);
+    doc.text(`Client: ${users.find((u) => u.id === intervention.client_id)?.name}`, 10, 20);
+    doc.text(`Description: ${intervention.description}`, 10, 30);
+    doc.text(`Priorité: ${intervention.priority}`, 10, 40);
+    doc.text(`Emplacement: ${intervention.location}`, 10, 50);
+    doc.text(`Date souhaitée: ${intervention.desired_date}`, 10, 60);
+    doc.text(`Statut: ${intervention.status}`, 10, 70);
+    doc.save(`intervention_${intervention.id}.pdf`);
+  };
 
-    console.log("Attribuer l'intervention...", interventionId, employeeId);
+  const assignIntervention = async (interventionId, employeeId) => {
+    if (!employeeId) return message.error("Veuillez sélectionner un employé.");
 
     try {
       const response = await axios.put(`http://127.0.0.1:8000/api/interventions/${interventionId}`, {
         employee_id: employeeId,
       });
-      console.log("Réponse de l'API:", response); // Pour déboguer l'API
+
       if (response.status === 200) {
         message.success("Intervention attribuée avec succès.");
-        setAssigningInterventionId(null); // Réinitialiser l'assignation après le succès
-        fetchInterventions(); // Recharger les interventions après mise à jour
+        setAssigningInterventionId(null);
+        fetchInterventions();
       } else {
         message.error("Erreur lors de l'attribution de l'intervention.");
       }
     } catch (error) {
-      console.error(error);
       message.error("Erreur lors de l'attribution de l'intervention.");
+    }
+  };
+
+  const cancelAssignment = async (interventionId) => {
+    try {
+      const response = await axios.put(`http://127.0.0.1:8000/api/interventions/${interventionId}/annuler`);
+      if (response.status === 200) {
+        message.success("Attribution annulée avec succès.");
+        fetchInterventions();
+      } else {
+        message.error("Erreur lors de l'annulation de l'attribution.");
+      }
+    } catch (error) {
+      message.error("Erreur lors de l'annulation de l'attribution.");
     }
   };
 
   const editUser = (userId) => {
     const user = users.find((u) => u.id === userId);
-    if (user.role === "admin") {
-      message.error("Impossible de modifier un utilisateur ayant le rôle 'admin'.");
-      return;
-    }
+    if (user.role === "admin") return message.error("Impossible de modifier un admin.");
     setSelectedUser(user);
     setIsModalVisible(true);
     form.setFieldsValue({
@@ -87,17 +122,13 @@ const AdminPage = () => {
   };
 
   const deleteUser = async (userId, role) => {
-    if (role === "admin") {
-      message.error("Impossible de supprimer un utilisateur ayant le rôle 'admin'.");
-      return;
-    }
+    if (role === "admin") return message.error("Impossible de supprimer un admin.");
     try {
       await axios.delete(`http://127.0.0.1:8000/api/users/${userId}`);
-      message.success("Utilisateur supprimé avec succès.");
+      message.success("Utilisateur supprimé.");
       fetchUsers();
     } catch (error) {
-      console.error(error);
-      message.error("Erreur lors de la suppression de l'utilisateur.");
+      message.error("Erreur lors de la suppression.");
     }
   };
 
@@ -106,11 +137,10 @@ const AdminPage = () => {
       await axios.put(`http://127.0.0.1:8000/api/users/${selectedUser.id}`, {
         role: values.role,
       });
-      message.success("Rôle mis à jour avec succès.");
+      message.success("Rôle mis à jour.");
       setIsModalVisible(false);
       fetchUsers();
     } catch (error) {
-      console.error(error);
       message.error("Erreur lors de la mise à jour du rôle.");
     }
   };
@@ -120,7 +150,6 @@ const AdminPage = () => {
     navigate("/login");
   };
 
-  // Fonction de filtrage des utilisateurs
   const handleUserSearch = (e) => {
     const value = e.target.value;
     const filtered = users.filter(
@@ -132,227 +161,198 @@ const AdminPage = () => {
     setFilteredUsers(filtered);
   };
 
-  // Fonction de filtrage des interventions
   const handleInterventionSearch = (e) => {
     const value = e.target.value;
-    const filtered = interventions.filter(
-      (intervention) =>
-        users.find(user => user.id === intervention.client_id)?.name.toLowerCase().includes(value.toLowerCase()) ||
-        intervention.location.toLowerCase().includes(value.toLowerCase()) ||
-        intervention.priority.toLowerCase().includes(value.toLowerCase())
+    const filtered = interventions.filter((intervention) =>
+      users.find((u) => u.id === intervention.client_id)?.name.toLowerCase().includes(value.toLowerCase()) ||
+      intervention.location.toLowerCase().includes(value.toLowerCase()) ||
+      intervention.priority.toLowerCase().includes(value.toLowerCase())
     );
     setFilteredInterventions(filtered);
   };
 
+  const handleMenuClick = (key) => {
+    if (key === "interventions") {
+      interventionRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else if (key === "users") {
+      userRef.current?.scrollIntoView({ behavior: "smooth" });
+    } else if (key === "logout") {
+      handleLogout();
+    }
+  };
+
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <Button
-          icon={<LogoutOutlined />}
-          onClick={handleLogout}
-          type="primary"
-          danger
-          style={styles.logoutButton}
+    <Layout style={{ minHeight: "100vh" }}>
+      <Sider width={220} theme="light" style={{ backgroundColor: "#e6f4ea" }}>
+        <div style={{ padding: "16px", textAlign: "center" }}>
+          <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="logo" style={{ width: "80px" }} />
+          <div style={{ fontWeight: "bold", fontSize: "18px", marginTop: "10px" }}>Bienvenue Salah</div>
+        </div>
+        <Menu
+          mode="inline"
+          onClick={(e) => handleMenuClick(e.key)}
+          defaultSelectedKeys={["interventions"]}
+          style={{ backgroundColor: "#e6f4ea" }}
         >
-          Se déconnecter
-        </Button>
-      </div>
-
-      <h1 style={styles.pageTitle}>Bienvenue Admin</h1>
-
-      {/* Barre de recherche pour les interventions */}
-      <h2 style={styles.sectionTitle}>Gestion des interventions</h2>
-      <Input
-        placeholder="Rechercher par client, emplacement ou priorité"
-        onChange={handleInterventionSearch}
-        style={{ marginBottom: "20px", width: "300px" }}
-      />
-      <Table
-        dataSource={filteredInterventions}
-        columns={[
-          {
-            title: "Client",
-            dataIndex: "client_id",
-            render: (clientId) => {
-              const client = users.find(user => user.id === clientId);
-              return client ? client.name : "Inconnu";
-            },
-          },
-          { title: "Description", dataIndex: "description" },
-          { title: "Priorité", dataIndex: "priority" },
-          { title: "Emplacement", dataIndex: "location" },
-          { title: "Date souhaitée", dataIndex: "desired_date" },
-          { title: "Statut", dataIndex: "status" },
-          {
-            title: "Attribuer",
-            render: (_, record) => {
-              if (assigningInterventionId === record.id) {
-                return (
-                  <>
-                    <Select
-                      placeholder="Sélectionner un employé"
-                      style={{ width: 200 }}
-                      onChange={(employeeId) => {
-                        assignIntervention(record.id, employeeId); // Attribuer l'employé directement
-                      }}
-                    >
-                      {users
-                        .filter(user => user.role === "employee")
-                        .map(user => (
-                          <Select.Option key={user.id} value={user.id}>
-                            {user.name}
-                          </Select.Option>
-                        ))}
-                    </Select>
-                    <Button
-                      type="default"
-                      onClick={() => setAssigningInterventionId(null)}
-                      style={{ marginLeft: 8 }}
-                    >
-                      Annuler
+          <Menu.Item key="interventions" icon={<FileTextOutlined />}>
+            Interventions
+          </Menu.Item>
+          <Menu.Item key="users" icon={<UserOutlined />}>
+            Utilisateurs
+          </Menu.Item>
+          <Menu.Item key="logout" icon={<LogoutOutlined />}>
+            Déconnexion
+          </Menu.Item>
+        </Menu>
+      </Sider>
+      <Layout>
+        <Content style={{ padding: "20px 40px" }}>
+          {/* Interventions */}
+          <div ref={interventionRef}>
+            <h2>Gestion des interventions</h2>
+            <Input
+              placeholder="Rechercher par client, emplacement ou priorité"
+              onChange={handleInterventionSearch}
+              style={{ marginBottom: "20px", width: "300px" }}
+            />
+            <Table
+              dataSource={filteredInterventions}
+              columns={[
+                {
+                  title: "Client",
+                  dataIndex: "client_id",
+                  render: (clientId) => {
+                    const client = users.find((user) => user.id === clientId);
+                    return client ? client.name : "Inconnu";
+                  },
+                },
+                { title: "Description", dataIndex: "description" },
+                { title: "Priorité", dataIndex: "priority" },
+                { title: "Emplacement", dataIndex: "location" },
+                { title: "Date souhaitée", dataIndex: "desired_date" },
+                { title: "Statut", dataIndex: "status" },
+                {
+                  title: "Attribuer",
+                  render: (_, record) =>
+                    record.status === "assigned" ? (
+                      <Button onClick={() => cancelAssignment(record.id)} style={{ marginRight: 8 }}>
+                        Annuler l'attribution
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => setAssigningInterventionId(record.id)}
+                        disabled={record.status !== "pending"}
+                      >
+                        Attribuer
+                      </Button>
+                    ),
+                },
+                {
+                  title: "PDF",
+                  render: (_, record) => (
+                    <Button onClick={() => generatePDF(record)} style={{ backgroundColor: "#4caf50", color: "#fff" }}>
+                      Générer PDF
                     </Button>
-                  </>
-                );
-              }
-              return (
-                <Button
-                  onClick={() => setAssigningInterventionId(record.id)} // Montre la sélection
-                  disabled={record.status !== "pending"} // Se désactive si l'intervention n'est pas "pending"
-                  style={styles.assignButton}
-                >
-                  Attribuer
-                </Button>
-              );
-            },
-          },
-        ]}
-        rowKey="id"
-        pagination={{ pageSize: 5 }}
-        style={styles.table}
-      />
+                  ),
+                },
+              ]}
+              rowKey="id"
+              pagination={{ pageSize: 5 }}
+            />
+          </div>
 
-      {/* Barre de recherche pour les utilisateurs */}
-      <h2 style={styles.sectionTitle}>Gestion des utilisateurs</h2>
-      <Input
-        placeholder="Rechercher par nom, email ou rôle"
-        onChange={handleUserSearch}
-        style={{ marginBottom: "20px", width: "300px" }}
-      />
-      <Table
-        dataSource={filteredUsers}
-        columns={[
-          { title: "Nom", dataIndex: "name" },
-          { title: "Email", dataIndex: "email" },
-          { title: "Rôle", dataIndex: "role" },
-          {
-            title: "Actions",
-            render: (_, record) => (
-              <div>
-                <Button
-                  icon={<EditOutlined />}
-                  onClick={() => editUser(record.id)}
-                  style={styles.editButton}
-                  disabled={record.role === "admin"}
-                />
-                <Popconfirm
-                  title={`Êtes-vous sûr de vouloir supprimer cet utilisateur${record.role === "admin" ? " (admin)" : ""} ?`}
-                  onConfirm={() => deleteUser(record.id, record.role)}
-                  okText="Oui"
-                  cancelText="Non"
-                  disabled={record.role === "admin"}
-                >
-                  <Button
-                    icon={<DeleteOutlined />}
-                    danger
-                    style={styles.deleteButton}
-                    disabled={record.role === "admin"}
-                  />
-                </Popconfirm>
-              </div>
-            ),
-          },
-        ]}
-        rowKey="id"
-        pagination={{ pageSize: 5 }}
-        style={styles.table}
-      />
+          {/* Utilisateurs */}
+          <div ref={userRef} style={{ marginTop: "40px" }}>
+            <h2>Gestion des utilisateurs</h2>
+            <Input
+              placeholder="Rechercher par nom, email ou rôle"
+              onChange={handleUserSearch}
+              style={{ marginBottom: "20px", width: "300px" }}
+            />
+            <Table
+              dataSource={filteredUsers}
+              columns={[
+                { title: "Nom", dataIndex: "name" },
+                { title: "Email", dataIndex: "email" },
+                { title: "Rôle", dataIndex: "role" },
+                {
+                  title: "Actions",
+                  render: (_, record) => (
+                    <div>
+                      <Button
+                        icon={<EditOutlined />}
+                        onClick={() => editUser(record.id)}
+                        style={{ marginRight: 10 }}
+                        disabled={record.role === "admin"}
+                      />
+                      <Popconfirm
+                        title="Supprimer cet utilisateur ?"
+                        onConfirm={() => deleteUser(record.id, record.role)}
+                        okText="Oui"
+                        cancelText="Non"
+                        disabled={record.role === "admin"}
+                      >
+                        <Button icon={<DeleteOutlined />} danger disabled={record.role === "admin"} />
+                      </Popconfirm>
+                    </div>
+                  ),
+                },
+              ]}
+              rowKey="id"
+              pagination={{ pageSize: 5 }}
+            />
+          </div>
 
-      {/* Modal pour modifier le rôle d'un utilisateur */}
-      <Modal
-        title="Modifier le rôle d'un utilisateur"
-        open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
-        footer={null}
-        style={styles.modal}
-      >
-        <Form form={form} onFinish={handleUpdateRole}>
-          <Form.Item name="name" label="Nom" rules={[{ required: true, message: "Veuillez entrer le nom" }]}>
-            <Input disabled />
-          </Form.Item>
-          <Form.Item name="email" label="Email" rules={[{ required: true, message: "Veuillez entrer l'email" }]}>
-            <Input disabled />
-          </Form.Item>
-          <Form.Item name="role" label="Rôle" rules={[{ required: true, message: "Veuillez sélectionner un rôle" }]}>
-            <Select placeholder="Sélectionner un rôle" disabled={selectedUser?.role === "admin"}>
-              <Select.Option value="employee">Employé</Select.Option>
-              <Select.Option value="client">Client</Select.Option>
+          {/* Modal modification utilisateur */}
+          <Modal
+            title="Modifier l'utilisateur"
+            visible={isModalVisible}
+            onCancel={() => setIsModalVisible(false)}
+            onOk={() => form.submit()}
+          >
+            <Form form={form} onFinish={handleUpdateRole}>
+              <Form.Item name="name" label="Nom" rules={[{ required: true, message: "Veuillez entrer un nom" }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="email" label="Email" rules={[{ required: true, message: "Veuillez entrer un email" }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="role" label="Rôle" rules={[{ required: true, message: "Veuillez sélectionner un rôle" }]}>
+                <Select>
+                  <Select.Option value="admin">Admin</Select.Option>
+                  <Select.Option value="user">Utilisateur</Select.Option>
+                  <Select.Option value="employee">Employé</Select.Option>
+                </Select>
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          {/* Modal attribution d'intervention */}
+          <Modal
+            title="Attribuer une intervention"
+            visible={assigningInterventionId !== null}
+            onCancel={() => setAssigningInterventionId(null)}
+            onOk={() => assignIntervention(assigningInterventionId, selectedUser)}
+            okText="Attribuer"
+          >
+            <Select
+              placeholder="Sélectionnez un employé"
+              style={{ width: "100%" }}
+              onChange={(value) => setSelectedUser(value)}
+            >
+              {users
+                .filter((user) => user.role === "employee")
+                .map((employee) => (
+                  <Select.Option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </Select.Option>
+                ))}
             </Select>
-          </Form.Item>
-          <Button type="primary" htmlType="submit" disabled={selectedUser?.role === "admin"} style={styles.submitButton}>
-            Modifier
-          </Button>
-        </Form>
-      </Modal>
-    </div>
+          </Modal>
+        </Content>
+      </Layout>
+    </Layout>
   );
-};
-
-const styles = {
-  container: {
-    padding: "30px",
-    fontFamily: "Arial, sans-serif",
-    backgroundColor: "#f4f6f9",
-    minHeight: "100vh",
-  },
-  header: {
-    textAlign: "right",
-    marginBottom: "20px",
-  },
-  pageTitle: {
-    textAlign: "center",
-    fontSize: "24px",
-    fontWeight: "bold",
-    color: "#4d4d4d",
-  },
-  sectionTitle: {
-    fontSize: "20px",
-    marginBottom: "10px",
-    color: "#333",
-  },
-  table: {
-    marginBottom: "20px",
-  },
-  assignButton: {
-    backgroundColor: "#1890ff",
-    color: "#fff",
-  },
-  editButton: {
-    marginRight: "10px",
-  },
-  deleteButton: {
-    marginLeft: "10px",
-  },
-  logoutButton: {
-    position: "absolute",
-    top: "20px",
-    left: "1100px",
-  },
-  modal: {
-    top: 20,
-  },
-  submitButton: {
-    marginTop: "10px",
-  },
 };
 
 export default AdminPage;

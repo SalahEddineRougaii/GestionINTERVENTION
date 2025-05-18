@@ -29,3 +29,7 @@ Route::get('/interventions/employee/{employee_id}', [InterventionController::cla
 
 // Route pour récupérer les interventions d'un client spécifique
 Route::get('/interventions/client/{client_id}', [InterventionController::class, 'getInterventionsByClient']);
+Route::put('/interventions/cancel/{id}', [InterventionController::class, 'cancel']);
+// Annuler l'attribution d'une intervention
+// Exemple d'appel via une route :
+Route::put('/interventions/{id}/annuler', [InterventionController::class, 'annulerAttribution']);

@@ -4,6 +4,7 @@ import axios from "axios";
 import { message, Form, Input, Button, Select } from "antd";
 import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons";
 import { useUserContext } from "./context/UserContext"; // Contexte utilisateur
+import cactusLogo from "./assets/images/logo-cactus.png"; // Import de l'image de l'entreprise
 
 const Connexion = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -63,7 +64,6 @@ const Connexion = () => {
     } catch (err) {
       console.error("Erreur API :", err.response?.data);
       if (err.response?.data?.errors) {
-        // Laravel retourne souvent les erreurs sous { errors: { field: ["message"] } }
         const errorMessages = Object.values(err.response.data.errors)
           .flat()
           .join("\n");
@@ -79,6 +79,9 @@ const Connexion = () => {
   return (
     <div style={styles.container}>
       <div style={styles.formContainer}>
+        {/* Ajout de l'image en haut */}
+        <img src={cactusLogo} alt="Cactus Logo" style={styles.logo} />
+
         <h2>{isSignUp ? "Créer un compte" : "Se connecter"}</h2>
 
         <Form style={styles.form} onFinish={handleSubmit}>
@@ -135,7 +138,6 @@ const Connexion = () => {
           </Button>
         </div>
         
-        {/* Cercle de transition */}
         <div className={`circle ${isSignUp ? "circleSignUp" : "circleSignIn"}`} />
       </div>
     </div>
@@ -145,14 +147,19 @@ const Connexion = () => {
 const styles = {
   container: { display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "#f7f7f7" },
   formContainer: { backgroundColor: "#ffffff", borderRadius: "8px", padding: "30px", boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)", width: "100%", maxWidth: "400px", textAlign: "center", position: "relative" },
+  logo: { width: "120px", marginBottom: "20px" },
   form: { width: "100%" },
-  button: { width: "100%", height: "45px", borderRadius: "8px", fontSize: "16px", backgroundColor: "#007bff", borderColor: "#007bff", color: "white" },
+  button: { 
+    width: "100%", 
+    height: "45px", 
+    borderRadius: "8px", 
+    fontSize: "16px", 
+    backgroundColor: "#2C9C6C", // Exemple de couleur verte inspirée de l'image
+    borderColor: "#2C9C6C", // Utilisation de la même couleur pour le bouton
+    color: "white" 
+  },
   toggleContainer: { marginTop: "20px" },
-  toggleButton: { fontSize: "14px", padding: "0", color: "#007bff", textDecoration: "underline" }
-
+  toggleButton: { fontSize: "14px", padding: "0", color: "#2C9C6C", textDecoration: "underline" } // Couleur correspondante
 };
 
 export default Connexion;
-
-
-  
